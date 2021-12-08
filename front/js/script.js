@@ -1,5 +1,4 @@
-// @TODO: change BASE_URL for deployment
-const BASE_URL = 'http://localhost:8080/api/'
+const BASE_URL = 'https://kanapi.gtnsimon.dev/api/'
 const PRODUCTS_URL = BASE_URL + 'products'
 
 /**
