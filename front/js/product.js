@@ -171,6 +171,100 @@ function validateCartInput (el, data) {
 }
 
 /**
+ * Returns cart from localStorage.
+ *
+ * @returns {Cart}
+ */
+function getCartFromStorage () {
+  // read cart from storage
+  const data = localStorage.getItem('cart') || null
+
+  // cart doesn't exsits, return an empty cart
+  if (!data) {
+    return []
+  }
+
+  // try decode cart to JSON otherwise return an empty cart
+  try {
+    return JSON.parse(data)
+  } catch (err) {
+    console.error(err)
+
+    return []
+  }
+}
+
+/**
+ * Write cart to storage.
+ *
+ * @param {Cart} cart
+ * @returns {boolean} `true` if cart has been written to localStorage
+ */
+function writeCartToStorage (cart) {
+  try {
+    // save cart to localStorage
+    localStorage.setItem('cart', JSON.stringify(cart))
+
+    return true
+  } catch (err) {
+    console.error(err)
+
+    return false
+  }
+}
+
+/**
+ * Create a cart item entry.
+ *
+ * @param {Product} data
+ * @param {CartItem['color']} color
+ * @param {CartItem['quantity']} quantity
+ *
+ * @returns {CartItem}
+ */
+function createCartItem (data, color, quantity) {
+  return {
+    productId: data._id,
+    color,
+    quantity,
+  }
+}
+
+/**
+ * - Update quantity if an item already exists in cart matching id and color.
+ * - Otherwise create an item with corresponding crietrias.
+ *
+ * @param {Cart} cart
+ * @param {Product} data
+ * @param {CartItem['color']} color
+ * @param {CartItem['quantity']} quantity
+ *
+ * @returns {[ type: 'insert' | 'update', item: CartItem, index?: number ]} Indicate what kind of action to do with this item
+ */
+function upsertItemFromCart (cart, data, color, quantity) {
+  /** @type {'insert' | 'update'} */
+  let type
+  /** @type {CartItem} */
+  let item
+
+  // get item from cart if exists or null
+  const itemIdx = cart.findIndex(item => item.productId === data._id && item.color === color)
+  item = cart[itemIdx] || null
+
+  if (item) {
+    // it is an update of quantity if an item already exsists with the color
+    type = 'update'
+    item = createCartItem(data, item.color, item.quantity + quantity)
+  } else {
+    // it is an insert otherwise
+    type = 'insert'
+    item = createCartItem(data, color, quantity)
+  }
+
+  return [ type, item, itemIdx ]
+}
+
+/**
  * Save a product to cart.
  *
  * @param {Product} data
@@ -178,7 +272,19 @@ function validateCartInput (el, data) {
  * @param {number} quantity
  */
 function saveToCart (data, color, quantity) {
-  console.error('Not Implemented')
+  const cart = getCartFromStorage()
+  const [ type, item, index ] = upsertItemFromCart(cart, data, color, quantity)
+
+  switch (type) {
+    case 'insert':
+      cart.push(item)
+      break
+    case 'update':
+      cart.splice(index, 1, item)
+      break
+  }
+
+  return writeCartToStorage(cart)
 }
 
 /**
@@ -200,10 +306,15 @@ function handleAddToCart (el, data) {
 
       // WIP: feedback but nothing is save
       const nexemplaires = quantity + ' exemplaire' + (quantity >= 2 ? 's' : '')
-      const message = `Le canapé ${data.name} ${color} a été ajouté en ${nexemplaires} à votre panier`
 
-      saveToCart(data, color, quantity)
-      window.alert(message)
+      // indicate if cart is updated
+      if (saveToCart(data, color, quantity)) {
+        const message = `Le canapé ${data.name} ${color} a été ajouté en ${nexemplaires} à votre panier`
+
+        window.alert(message)
+      } else {
+        window.alert(`Une erreur est survenue. Le panier n'a pas été modifié.`)
+      }
     } catch (err) {
       console.error(err)
 
