@@ -4,7 +4,9 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "docker build --no-cache -f ./Dockerfile -t eu.gcr.io/gtnsimon/kanap-backend .",
+    "start": "node server.js",
+    "start:docker": "npm run build && docker run --rm -p 8080:8080 --env PORT=8080 -it eu.gcr.io/gtnsimon/kanap-backend"
   },
   "author": "",
   "license": "ISC",
