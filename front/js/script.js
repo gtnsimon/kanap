@@ -7,7 +7,7 @@ const PRODUCTS_URL = BASE_URL + 'products'
  * @param {RequestInfo} input
  * @returns {Promise<Products>}
  */
-function fetchProduct (input) {
+function fetchProducts (input) {
   return fetch(input)
     .then((response) => {
       // is response status is valid to return to json?
@@ -132,7 +132,7 @@ function renderProductsError (el) {
  */
 async function renderProducts (el) {
   try {
-    const products = await fetchProduct(PRODUCTS_URL)
+    const products = await fetchProducts(PRODUCTS_URL)
 
     renderProductsItems(el, products)
   } catch {
