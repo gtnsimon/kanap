@@ -135,12 +135,12 @@ export function createCartItem (data, color, quantity) {
  * @param {Cart} cart
  * @param {Product} data
  * @param {CartItem['color']} color
- * @param {CartItem['quantity']} quantity
+ * @param {number | (quantity: number) => number} quantity
  *
- * @returns {[ type: 'insert' | 'update', item: CartItem, index?: number ]} Indicate what kind of action to do with this item
+ * @returns {[ type: RecordsType, item?: CartItem, index?: number ]} Indicate what kind of action to do with this item
  */
-export function upsertItemFromCart (cart, data, color, quantity) {
-  /** @type {'insert' | 'update'} */
+export function createCartRecord (cart, data, color, quantity) {
+  /** @type {RecordsType} */
   let type
   /** @type {CartItem} */
   let item
@@ -149,14 +149,19 @@ export function upsertItemFromCart (cart, data, color, quantity) {
   const itemIdx = cart.findIndex(item => item.productId === data._id && item.color === color)
   item = cart[itemIdx] || null
 
-  if (item) {
+  // allow increment cart value on existing item
+  const quantityValue = typeof quantity === 'function' ? quantity((item && item.quantity) || 0) : quantity
+
+  if (item && (!quantityValue || quantityValue <= 0)) {
+    type = 'remove'
+  } else if (item) {
     // it is an update of quantity if an item already exsists with the color
     type = 'update'
-    item = createCartItem(data, item.color, item.quantity + quantity)
+    item = createCartItem(data, item.color, quantityValue)
   } else {
     // it is an insert otherwise
     type = 'insert'
-    item = createCartItem(data, color, quantity)
+    item = createCartItem(data, color, quantityValue)
   }
 
   return [ type, item, itemIdx ]
@@ -167,13 +172,17 @@ export function upsertItemFromCart (cart, data, color, quantity) {
  *
  * @param {Product} data
  * @param {string} color
- * @param {number} quantity
+ * @param {number | (quantity: number) => number} quantity
+ * @param {SaveHandlers} handlers Callback to run after wirtting to storage
  */
-export function saveToCart (data, color, quantity) {
+export function saveToCart (data, color, quantity, handlers = {}) {
   const cart = getCartFromStorage()
-  const [ type, item, index ] = upsertItemFromCart(cart, data, color, quantity)
+  const [ type, item, index ] = createCartRecord(cart, data, color, quantity)
 
   switch (type) {
+    case 'remove':
+      cart.splice(index, 1)
+      break
     case 'insert':
       cart.push(item)
       break
@@ -182,17 +191,25 @@ export function saveToCart (data, color, quantity) {
       break
   }
 
-  return writeCartToStorage(cart)
+  if (writeCartToStorage(cart)) {
+    if (handlers && handlers[type] && typeof handlers[type] === 'function') {
+      handlers[type](item)
+    }
+
+    return true
+  }
+
+  return false
 }
 
 /**
  * Sum all items' quantity.
  *
  * @param {HTMLElement} el Element where to write total articles
- * @param {CartProducts} items
+ * @param {CartProducts} cart
  */
-export function countArticles (el, items) {
-  const total = sum(...items.map(item => item.quantity))
+export function computeQuantity (el, cart) {
+  const total = sum(...cart.map(item => item.quantity))
 
   el.innerText = total
 
@@ -203,10 +220,10 @@ export function countArticles (el, items) {
  * Sum all items's price by quantity.
  *
  * @param {HTMLElement} el Element where to write total cart price
- * @param {CartProducts} items
+ * @param {CartProducts} cart
  */
-export function computeTotalPrice (el, items) {
-  const total = sum(...items.map(item => item.price * item.quantity))
+export function computePriceByQuantity (el, cart) {
+  const total = sum(...cart.map(item => item.price * item.quantity))
 
   el.innerText = localePrice(total)
 

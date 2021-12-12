@@ -3,6 +3,16 @@ type Cart = CartItem[]
 type CartProducts = CartProduct[]
 type CartProduct = Product & Omit<CartItem, 'productId'>
 
+type RecordsType = 'insert' | 'update' | 'remove'
+
+type SaveHandlers = {
+  [key in RecordsType]: (item: CartProduct) => void
+}
+
+type UpdateItemHandlers = {
+  [key in RecordsType]: (productEl: HTMLElement, item: CartProduct) => void
+}
+
 interface Product {
   colors: string[]
   _id: string

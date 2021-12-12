@@ -136,7 +136,7 @@ function handleAddToCart (el, data) {
       const nexemplaires = quantity + ' exemplaire' + (quantity >= 2 ? 's' : '')
 
       // indicate if cart is updated
-      if (saveToCart(data, color, quantity)) {
+      if (saveToCart(data, color, acc => acc + quantity)) {
         const message = `Le canapé ${data.name} ${color} a été ajouté en ${nexemplaires} à votre panier`
 
         window.alert(message)
