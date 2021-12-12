@@ -1,50 +1,6 @@
-const BASE_URL = 'https://kanapi.gtnsimon.dev/api/'
+import { BASE_URL, setDocumentTitle, fetchData, saveToCart, ValidationEntryError, ValidationError } from './utils.js'
+
 const PRODUCT_URL = id => (BASE_URL + 'products/' + id)
-
-class ValidationError extends Error {
-  /**
-   * @param {ValidationEntryError[]} errors
-   */
-  constructor (errors) {
-    super(`Erreur${errors.length >= 2 ? 's' : ''} de validation`)
-
-    this.errors = errors
-    this.nbErrors = errors.length
-  }
-
-  showErrors () {
-    const messages = this.errors.map(err => err.message).join('\r\n')
-
-    window.alert(messages)
-  }
-}
-
-class ValidationEntryError extends Error {
-  constructor (message, el) {
-    super(message)
-
-    this.el = el
-  }
-}
-
-/**
- * Fetch product from API.
- *
- * @param {RequestInfo} input
- * @returns {Promise<Product>}
- */
-function fetchProduct (input) {
-  return fetch(input)
-    .then((response) => {
-      // is response status is valid to return to json?
-      if ([ 200, 201 ].includes(response.status)) {
-        return response.json()
-      }
-
-      // throw otherwise
-      return Promise.reject(new Error(response))
-    })
-}
 
 /**
  * Returns the product id from a valid URL.
@@ -57,17 +13,6 @@ function getProductId (url) {
   const productId = Url.searchParams.get('id')
 
   return productId
-}
-
-/**
- * Set page title (visible in browser tab).
- *
- * @param {string} title
- */
-function setTitle (title) {
-  const titleEl = document.head.querySelector('title')
-
-  titleEl.innerText = title
 }
 
 /**
@@ -171,123 +116,6 @@ function validateCartInput (el, data) {
 }
 
 /**
- * Returns cart from localStorage.
- *
- * @returns {Cart}
- */
-function getCartFromStorage () {
-  // read cart from storage
-  const data = localStorage.getItem('cart') || null
-
-  // cart doesn't exsits, return an empty cart
-  if (!data) {
-    return []
-  }
-
-  // try decode cart to JSON otherwise return an empty cart
-  try {
-    return JSON.parse(data)
-  } catch (err) {
-    console.error(err)
-
-    return []
-  }
-}
-
-/**
- * Write cart to storage.
- *
- * @param {Cart} cart
- * @returns {boolean} `true` if cart has been written to localStorage
- */
-function writeCartToStorage (cart) {
-  try {
-    // save cart to localStorage
-    localStorage.setItem('cart', JSON.stringify(cart))
-
-    return true
-  } catch (err) {
-    console.error(err)
-
-    return false
-  }
-}
-
-/**
- * Create a cart item entry.
- *
- * @param {Product} data
- * @param {CartItem['color']} color
- * @param {CartItem['quantity']} quantity
- *
- * @returns {CartItem}
- */
-function createCartItem (data, color, quantity) {
-  return {
-    productId: data._id,
-    color,
-    quantity,
-  }
-}
-
-/**
- * - Update quantity if an item already exists in cart matching id and color.
- * - Otherwise create an item with corresponding crietrias.
- *
- * @param {Cart} cart
- * @param {Product} data
- * @param {CartItem['color']} color
- * @param {CartItem['quantity']} quantity
- *
- * @returns {[ type: 'insert' | 'update', item: CartItem, index?: number ]} Indicate what kind of action to do with this item
- */
-function upsertItemFromCart (cart, data, color, quantity) {
-  /** @type {'insert' | 'update'} */
-  let type
-  /** @type {CartItem} */
-  let item
-
-  // get item from cart if exists or null
-  const itemIdx = cart.findIndex(item => item.productId === data._id && item.color === color)
-  item = cart[itemIdx] || null
-
-  if (item) {
-    // it is an update of quantity if an item already exsists with the color
-    type = 'update'
-    item = createCartItem(data, item.color, item.quantity + quantity)
-  } else {
-    // it is an insert otherwise
-    type = 'insert'
-    item = createCartItem(data, color, quantity)
-  }
-
-  return [ type, item, itemIdx ]
-}
-
-/**
- * Save a product to cart.
- *
- * @param {Product} data
- * @param {string} color
- * @param {number} quantity
- */
-function saveToCart (data, color, quantity) {
-  const cart = getCartFromStorage()
-  const [ type, item, index ] = upsertItemFromCart(cart, data, color, quantity)
-
-  switch (type) {
-    case 'insert':
-      cart.push(item)
-      break
-    case 'update':
-      cart.splice(index, 1, item)
-      break
-  }
-
-  return writeCartToStorage(cart)
-}
-
-/**
  * Handle add to cart click.
  *
  * @param {HTMLElement} el Element where to bind listeners
@@ -331,24 +159,23 @@ function handleAddToCart (el, data) {
  *
  * @param {HTMLElement} el Element where to render product
  */
-async function renderProduct (el) {
+async function renderProduct (el, product) {
   try {
-    const productId = getProductId(window.location.href)
-    const product = await fetchProduct(PRODUCT_URL(productId))
-
     const hydratedEl = hydrateProduct(el, product)
 
     handleAddToCart(hydratedEl, product)
-    setTitle(product.name)
+    setDocumentTitle(product.name)
   } catch (err) {
     console.error(err)
-    // renderProductsError(el)
   }
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', async function () {
+  const productId = getProductId(window.location.href)
+  const product = await fetchData(PRODUCT_URL(productId))
+
   /** Product container where to render */
   const item = document.querySelector('.item')
 
-  renderProduct(item)
+  renderProduct(item, product)
 })

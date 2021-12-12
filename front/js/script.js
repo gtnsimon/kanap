@@ -1,37 +1,6 @@
-const BASE_URL = 'https://kanapi.gtnsimon.dev/api/'
+import { BASE_URL, fetchData, createElementFactory } from './utils.js'
+
 const PRODUCTS_URL = BASE_URL + 'products'
-
-/**
- * Fetch products from API.
- *
- * @param {RequestInfo} input
- * @returns {Promise<Products>}
- */
-function fetchProducts (input) {
-  return fetch(input)
-    .then((response) => {
-      // is response status is valid to return to json?
-      if ([ 200, 201 ].includes(response.status)) {
-        return response.json()
-      }
-
-      // throw otherwise
-      return Promise.reject(new Error(response))
-    })
-}
-
-/**
- * Create an object with tags' name as key and element as value.
- *
- * @param {...string} elements Tags' name to create
- * @returns {{ [key: string]: Element }}
- */
-function createElementFactory (...elements) {
-  return elements.reduce((acc, element) => ({
-    ...acc,
-    [element]: document.createElement(element)
-  }), {})
-}
 
 /**
  * Create a product element.
@@ -132,10 +101,12 @@ function renderProductsError (el) {
  */
 async function renderProducts (el) {
   try {
-    const products = await fetchProducts(PRODUCTS_URL)
+    /** @type {Products} */
+    const products = await fetchData(PRODUCTS_URL)
 
     renderProductsItems(el, products)
-  } catch {
+  } catch (err) {
+    console.error(err)
     renderProductsError(el)
   }
 }
