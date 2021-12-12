@@ -1,88 +1,6 @@
-const BASE_URL = 'https://kanapi.gtnsimon.dev/api/'
+import { BASE_URL, getCartFromStorage, computeQuantity, computePriceByQuantity, fetchData, localePrice, createElementFactory, saveToCart } from './utils.js'
+
 const PRODUCTS_URL = BASE_URL + 'products'
-
-/**
- * Fetch products from API.
- *
- * @param {RequestInfo} input
- * @returns {Promise<Products>}
- */
-function fetchProducts (input) {
-  return fetch(input)
-    .then((response) => {
-      // is response status is valid to return to json?
-      if ([ 200, 201 ].includes(response.status)) {
-        return response.json()
-      }
-
-      // throw otherwise
-      return Promise.reject(new Error(response))
-    })
-}
-
-/**
- * Create an object with tags' name as key and element as value.
- *
- * @param {...string} elements Tags' name to create
- * @returns {{ [key: string]: Element }}
- */
-function createElementFactory (...elements) {
-  return elements.reduce((acc, element) => {
-    const [ tag, key = tag ] = element.split(':').reverse()
-
-    return {
-      ...acc,
-      [key]: document.createElement(tag)
-    }
-  }, {})
-}
-
-/**
- * Summ all values.
- *
- * @param  {...number} values
- * @returns {number}
- */
-function sum (...values) {
-  return values.reduce((acc, n) => acc + n, 0)
-}
-
-/**
- * Format price to fixed 2 digits according to locale.
- *
- * @param {number} value
- * @returns {string}
- */
-function localePrice (value) {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
-/**
- * Returns cart from localStorage.
- *
- * @returns {Cart}
- */
-function getCartFromStorage () {
-  // read cart from storage
-  const data = localStorage.getItem('cart') || null
-
-  // cart doesn't exsits, return an empty cart
-  if (!data) {
-    return []
-  }
-
-  // try decode cart to JSON otherwise return an empty cart
-  try {
-    return JSON.parse(data)
-  } catch (err) {
-    console.error(err)
-
-    return []
-  }
-}
 
 /**
  * Map cart item with product data.
@@ -92,7 +10,7 @@ function getCartFromStorage () {
  *
  * @returns {CartProduct}
  */
-function mapCartItem ({ productId, ...item }, products) {
+function mapCartItem (products, { productId, ...item }) {
   const product = products.find(({ _id }) => productId === _id)
 
   if (!product) {
@@ -104,7 +22,6 @@ function mapCartItem ({ productId, ...item }, products) {
     ...item,
   }
 }
-
 
 /**
  * Create a cart element.
@@ -191,13 +108,11 @@ function createCartElement (data) {
  * @param {HTMLElement} el
  * @param {Products} products
  *
- * @returns {CartProducts}
+ * @returns {{ target: HTMLElement, items: CartProducts }}
  */
 function renderCartItems (el, products) {
-  const cart = getCartFromStorage()
-
   const target = el.cloneNode()
-  const items = cart.map(item => mapCartItem(item, products)).filter(Boolean)
+  const items = getCartProducts(products)
   const elements = items.map(item => createCartElement(item))
 
   // append each product to list
@@ -206,33 +121,74 @@ function renderCartItems (el, products) {
   // replace content with the list of products
   el.parentElement.replaceChild(target, el)
 
-  return items
+  return target
 }
 
 /**
- * Sum all items' quantity.
+ * Update cart item.
  *
- * @param {CartProducts} items
+ * @param {HTMLElement} el Parent of all cart elements
+ * @param {HTMLElement} triggerEl Cart item element or one of its child
+ * @param {number} quantity Quantity to set in cart
+ * @param {Products} products
+ * @param {UpdateItemHandlers} handlers
  */
-function countArticles (items) {
-  const total = sum(...items.map(item => item.quantity))
+function updateItem (el, triggerEl, quantity, products, handlers) {
+  /** @type {HTMLElement} */
+  const productEl = Array.from(el.children).find(child => child.contains(triggerEl) || child === triggerEl)
 
-  document.querySelector('#totalQuantity').innerText = total
+  if (productEl) {
+    const { id: productId, color } = productEl.dataset
+    const product = (productId && products.find(product => product._id === productId)) || null
 
-  return total
+    /** @type {SaveHandlers} */
+    const wrappedHandlers = Object.fromEntries(Object.entries(handlers).map(([ k, fn ]) => ([ k, item => fn(productEl, item) ])))
+
+    if (product && productId && color) {
+      if (saveToCart(product, color, quantity, wrappedHandlers)) {
+        computeTotalAndPrice(products)
+      }
+    }
+  }
 }
 
 /**
- * Sum all items's price by quantity.
+ * Registers event to listen for change on items.
  *
- * @param {CartProducts} items
+ * @param {HTMLElement} el Parent of all cart elements
+ * @param {Products} products
  */
-function computeTotalPrice (items) {
-  const total = sum(...items.map(item => item.price * item.quantity))
+function handleItemsChange (el, products) {
+  /** @type {NodeListOf<HTMLInputElement>} */
+  const itemQuantityList = el.querySelectorAll('.itemQuantity')
+  /** @type {NodeListOf<HTMLInputElement>} */
+  const deleteItemList = el.querySelectorAll('.deleteItem')
 
-  document.querySelector('#totalPrice').innerText = localePrice(total)
+  /** @type {UpdateItemHandlers} */
+  const handlers = {
+    remove (productEl) {
+      el.removeChild(productEl)
+    },
+  }
 
-  return total
+  /**
+   * @this {HTMLInputElement}
+   * @param {InputEvent} event
+   */
+  function onQuantityChange (event) {
+    return updateItem(el, event.currentTarget, this.valueAsNumber, products, handlers)
+  }
+
+  /**
+   * @this {HTMLInputElement}
+   * @param {InputEvent} event
+   */
+  function onDelete (event) {
+    return updateItem(el, event.currentTarget, 0, products, handlers)
+  }
+
+  itemQuantityList.forEach(inputQuantity => inputQuantity.addEventListener('change', onQuantityChange))
+  deleteItemList.forEach(deleteItem => deleteItem.addEventListener('click', onDelete))
 }
 
 /**
@@ -240,18 +196,34 @@ function computeTotalPrice (items) {
  * If it fails to fetch it handles error nicely.
  *
  * @param {HTMLElement} el Element where to render cart
+ * @param {Products} products
  */
-async function renderCart (el) {
-  const products = await fetchProducts(PRODUCTS_URL)
-  const items = renderCartItems(el, products)
+async function renderCart (el, products) {
+  const target = renderCartItems(el, products)
 
-  countArticles(items)
-  computeTotalPrice(items)
+  computeTotalAndPrice(products)
+  handleItemsChange(target, products)
 }
 
-document.addEventListener('DOMContentLoaded', function () {
-  /** Cart container where to render */
-  const items = document.querySelector('#cart__items')
+const getItemsEl = () => document.querySelector('#cart__items')
 
-  renderCart(items)
+const getCartProducts = products => {
+  const cart = getCartFromStorage()
+
+  return cart.map(item => mapCartItem(products, item)).filter(Boolean)
+}
+
+const computeTotalAndPrice = products => {
+  const items = getCartProducts(products)
+
+  computeQuantity(document.querySelector('#totalQuantity'), items)
+  computePriceByQuantity(document.querySelector('#totalPrice'), items)
+}
+
+document.addEventListener('DOMContentLoaded', async function () {
+  /** @type {Products} */
+  const products = await fetchData(PRODUCTS_URL)
+
+  /** Cart container where to render */
+  renderCart(getItemsEl(), products)
 })
