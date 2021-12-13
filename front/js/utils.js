@@ -59,7 +59,7 @@ export function fetchData (input) {
   return fetch(input)
     .then((response) => {
       // is response status is valid to return to json?
-      if (response.status === 200) {
+      if ([ 200, 201 ].includes(response.status)) {
         return response.json()
       }
 
