@@ -68,6 +68,21 @@ export function fetchData (input) {
     })
 }
 
+
+/**
+ * Returns a param value from a valid URL.
+ *
+ * @param {string | URL} url A valid URL
+ * @param {string} param Param value to get
+ * @returns {string} The product id found in url
+ */
+export function getURLParam (url, param = 'id') {
+  const Url = new URL(url)
+  const value = Url.searchParams.get(param)
+
+  return value
+}
+
 /**
  * Returns cart from localStorage.
  *

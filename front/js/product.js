@@ -1,19 +1,6 @@
-import { BASE_URL, setDocumentTitle, fetchData, saveToCart, ValidationEntryError, ValidationError } from './utils.js'
+import { BASE_URL, setDocumentTitle, fetchData, saveToCart, ValidationEntryError, ValidationError, getURLParam } from './utils.js'
 
 const PRODUCT_URL = id => (BASE_URL + 'products/' + id)
-
-/**
- * Returns the product id from a valid URL.
- *
- * @param {string | URL} url A valid URL
- * @returns {string} The product id found in url
- */
-function getProductId (url) {
-  const Url = new URL(url)
-  const productId = Url.searchParams.get('id')
-
-  return productId
-}
 
 /**
  * Create a select option.
@@ -171,7 +158,7 @@ async function renderProduct (el, product) {
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
-  const productId = getProductId(window.location.href)
+  const productId = getURLParam(window.location.href)
   const product = await fetchData(PRODUCT_URL(productId))
 
   /** Product container where to render */
