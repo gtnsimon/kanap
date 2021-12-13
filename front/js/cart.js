@@ -1,6 +1,7 @@
-import { BASE_URL, getCartFromStorage, computeQuantity, computePriceByQuantity, fetchData, localePrice, createElementFactory, saveToCart } from './utils.js'
+import { BASE_URL, getCartFromStorage, computeQuantity, computePriceByQuantity, fetchData, localePrice, createElementFactory, saveToCart, writeCartToStorage } from './utils.js'
 
 const PRODUCTS_URL = BASE_URL + 'products'
+const ORDER_URL = PRODUCTS_URL + '/order'
 
 /**
  * Map cart item with product data.
@@ -146,7 +147,7 @@ function updateItem (el, triggerEl, quantity, products, handlers) {
 
     if (product && productId && color) {
       if (saveToCart(product, color, quantity, wrappedHandlers)) {
-        computeTotalAndPrice(products)
+        updateCartState(products)
       }
     }
   }
@@ -176,7 +177,10 @@ function handleItemsChange (el, products) {
    * @param {InputEvent} event
    */
   function onQuantityChange (event) {
-    return updateItem(el, event.currentTarget, this.valueAsNumber, products, handlers)
+    const quantity = this.valueAsNumber
+
+    // prevent removing element on empty quantity when typing
+    return quantity && updateItem(el, event.currentTarget, quantity, products, handlers)
   }
 
   /**
@@ -201,8 +205,54 @@ function handleItemsChange (el, products) {
 async function renderCart (el, products) {
   const target = renderCartItems(el, products)
 
-  computeTotalAndPrice(products)
+  updateCartState(products)
   handleItemsChange(target, products)
+}
+
+/**
+ * @this {HTMLFormElement}
+ * @param {Event} event
+ */
+async function onFormSubmit (event) {
+  event.preventDefault()
+
+  const contact = Object.fromEntries((new FormData(this)).entries())
+  const products = getCartFromStorage().map(({ productId }) => productId)
+
+  const headers = { 'Content-Type': 'application/json; charset=UTF-8' }
+  const body = JSON.stringify({ contact, products })
+
+  try {
+    const req = new Request(ORDER_URL, { method: 'POST', headers, body })
+    const { orderId } = await fetchData(req)
+
+    const confirmationURL = new URL(window.location.href)
+
+    confirmationURL.pathname = confirmationURL.pathname.replace(/cart.html$/, 'confirmation.html')
+    confirmationURL.searchParams.set('orderId', orderId)
+
+    writeCartToStorage([])
+    window.location.href = confirmationURL.toString()
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+/**
+ * @param {HTMLFormElement} formEl
+ * @param {CartProducts} items
+ */
+function handleForm (formEl, items) {
+  if (items.length) {
+    formEl.setAttribute('disabled', false)
+    formEl.style.display = ''
+
+    formEl.removeEventListener('submit', onFormSubmit)
+    formEl.addEventListener('submit', onFormSubmit)
+  } else {
+    formEl.setAttribute('disabled', true)
+    formEl.style.display = 'none'
+  }
 }
 
 const getItemsEl = () => document.querySelector('#cart__items')
@@ -213,11 +263,12 @@ const getCartProducts = products => {
   return cart.map(item => mapCartItem(products, item)).filter(Boolean)
 }
 
-const computeTotalAndPrice = products => {
+const updateCartState = products => {
   const items = getCartProducts(products)
 
   computeQuantity(document.querySelector('#totalQuantity'), items)
   computePriceByQuantity(document.querySelector('#totalPrice'), items)
+  handleForm(document.querySelector('.cart__order__form'), items)
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
